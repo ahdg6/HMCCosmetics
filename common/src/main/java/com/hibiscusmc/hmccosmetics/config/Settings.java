@@ -25,12 +25,18 @@ public class Settings {
     private static final String PARTICLE_COUNT = "particle-count";
     private static final String DYE_MENU_PATH = "dye-menu";
     private static final String DYE_MENU_NAME = "title";
+    private static final String DYE_MENU_INPUT_SLOT = "input-slot";
+    private static final String DYE_MENU_OUTPUT_SLOT = "output-slot";
     private static final String DEBUG_ENABLE_PETH = "debug-mode";
     private static final String TICK_PERIOD_PATH = "tick-period";
     private static final String UNAPPLY_DEATH_PATH = "unapply-on-death";
+    private static final String FORCE_PERMISSION_JOIN_PATH = "force-permission-join";
+    private static final String EMOTE_DISTANCE_PATH = "emote-distance";
 
     private static String defaultMenu;
     private static String dyeMenuName;
+    private static int dyeMenuInputSlot;
+    private static int dyeMenuOutputSlot;
     private static int configVersion;
     private static boolean requireEmptyHelmet;
     private static boolean requireEmptyOffHand;
@@ -39,9 +45,11 @@ public class Settings {
     private static boolean requireEmptyBoots;
     private static boolean debugMode;
     private static boolean unapplyOnDeath;
+    private static boolean forcePermissionJoin;
     private static int lookDownPitch;
     private static int viewDistance;
     private static int tickPeriod;
+    private static double emoteDistance;
     private static Vector balloonOffset;
 
     public static void load(ConfigurationNode source) {
@@ -67,6 +75,8 @@ public class Settings {
         requireEmptyPants = cosmeticSettings.node(REQUIRE_EMPTY_PANTS_PATH).getBoolean();
         requireEmptyBoots = cosmeticSettings.node(REQUIRE_EMPTY_BOOTS_PATH).getBoolean();
         unapplyOnDeath = cosmeticSettings.node(UNAPPLY_DEATH_PATH).getBoolean(false);
+        forcePermissionJoin = cosmeticSettings.node(FORCE_PERMISSION_JOIN_PATH).getBoolean(false);
+        emoteDistance = cosmeticSettings.node(EMOTE_DISTANCE_PATH).getDouble(-3);
 
         tickPeriod = cosmeticSettings.node(TICK_PERIOD_PATH).getInt(-1);
         lookDownPitch = cosmeticSettings.node(LOOK_DOWN_PITCH_PATH).getInt();
@@ -79,6 +89,8 @@ public class Settings {
         ConfigurationNode dyeMenuSettings = source.node(DYE_MENU_PATH);
 
         dyeMenuName = dyeMenuSettings.node(DYE_MENU_NAME).getString("Dye Menu");
+        dyeMenuInputSlot = dyeMenuSettings.node(DYE_MENU_INPUT_SLOT).getInt(19);
+        dyeMenuOutputSlot = dyeMenuSettings.node(DYE_MENU_OUTPUT_SLOT).getInt(25);
     }
 
     private static Vector loadVector(final ConfigurationNode config) {
@@ -172,6 +184,8 @@ public class Settings {
     public static String getDyeMenuName() {
         return dyeMenuName;
     }
+    public static int getDyeMenuInputSlot() { return dyeMenuInputSlot; }
+    public static int getDyeMenuOutputSlot() { return dyeMenuOutputSlot; }
 
     public static boolean isDebugEnabled() {
         return debugMode;
@@ -183,9 +197,16 @@ public class Settings {
     public static boolean getUnapplyOnDeath() {
         return unapplyOnDeath;
     }
+    public static boolean getForcePermissionJoin() {
+        return forcePermissionJoin;
+    }
 
     public static boolean getDebugMode() {
         return debugMode;
+    }
+
+    public static double getEmoteDistance() {
+        return emoteDistance;
     }
     public static void setDebugMode(boolean newSetting) {
         debugMode = newSetting;

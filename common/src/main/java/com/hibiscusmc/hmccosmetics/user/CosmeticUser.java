@@ -6,22 +6,20 @@ import com.hibiscusmc.hmccosmetics.config.Settings;
 import com.hibiscusmc.hmccosmetics.config.WardrobeSettings;
 import com.hibiscusmc.hmccosmetics.cosmetic.Cosmetic;
 import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
-import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticArmorType;
-import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBackpackType;
-import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
-import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticMainhandType;
+import com.hibiscusmc.hmccosmetics.cosmetic.types.*;
 import com.hibiscusmc.hmccosmetics.user.manager.UserBackpackManager;
 import com.hibiscusmc.hmccosmetics.user.manager.UserBalloonManager;
 import com.hibiscusmc.hmccosmetics.nms.NMSHandlers;
+import com.hibiscusmc.hmccosmetics.user.manager.UserEmoteManager;
+import com.hibiscusmc.hmccosmetics.user.manager.UserWardrobeManager;
 import com.hibiscusmc.hmccosmetics.util.InventoryUtils;
 import com.hibiscusmc.hmccosmetics.util.MessagesUtil;
 import com.hibiscusmc.hmccosmetics.util.PlayerUtils;
 import com.hibiscusmc.hmccosmetics.util.packets.PacketManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
+import org.bukkit.Location;
 import org.bukkit.Material;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.*;
@@ -35,9 +33,10 @@ public class CosmeticUser {
     private UUID uniqueId;
     private int taskId;
     private HashMap<CosmeticSlot, Cosmetic> playerCosmetics = new HashMap<>();
-    private Wardrobe wardrobe;
+    private UserWardrobeManager userWardrobeManager;
     private UserBalloonManager userBalloonManager;
     private UserBackpackManager userBackpackManager;
+    private UserEmoteManager userEmoteManager;
 
     // Cosmetic Settings/Toggles
     private boolean hideCosmetics;
@@ -46,6 +45,7 @@ public class CosmeticUser {
 
     public CosmeticUser(UUID uuid) {
         this.uniqueId = uuid;
+        userEmoteManager = new UserEmoteManager(this);
         tick();
     }
 
@@ -80,9 +80,6 @@ public class CosmeticUser {
     public Collection<Cosmetic> getCosmetic() {
         return playerCosmetics.values();
     }
-    public UserBalloonManager getBalloonEntity() {
-        return this.userBalloonManager;
-    }
 
     public void addPlayerCosmetic(Cosmetic cosmetic) {
         addPlayerCosmetic(cosmetic, null);
@@ -114,13 +111,6 @@ public class CosmeticUser {
             spawnBalloon(balloonType);
         }
     }
-    public void toggleCosmetic(Cosmetic cosmetic) {
-        if (hasCosmeticInSlot(cosmetic.getSlot())) {
-            removeCosmeticSlot(cosmetic.getSlot());
-            return;
-        }
-        addPlayerCosmetic(cosmetic);
-    }
 
     public void removeCosmetics() {
         // Small optimization could be made, but Concurrent modification prevents us from both getting and removing
@@ -143,6 +133,9 @@ public class CosmeticUser {
         }
         if (slot == CosmeticSlot.BALLOON) {
             despawnBalloon();
+        }
+        if (slot == CosmeticSlot.EMOTE) {
+
         }
         colors.remove(slot);
         playerCosmetics.remove(slot);
@@ -213,8 +206,32 @@ public class CosmeticUser {
         return item;
     }
 
+    public UserBackpackManager getUserBackpackManager() {
+        return userBackpackManager;
+    }
+
+    public UserBalloonManager getBalloonManager() {
+        return this.userBalloonManager;
+    }
+
+    public UserWardrobeManager getWardrobeManager() {
+        return userWardrobeManager;
+    }
+
+    public UserEmoteManager getUserEmoteManager() {
+        return userEmoteManager;
+    }
+
     public void enterWardrobe() {
-        if (!WardrobeSettings.inDistanceOfStatic(getPlayer().getLocation())) {
+        enterWardrobe(false);
+    }
+
+    public void enterWardrobe(boolean ignoreDistance) {
+        enterWardrobe(ignoreDistance, WardrobeSettings.getLeaveLocation(), WardrobeSettings.getViewerLocation(), WardrobeSettings.getWardrobeLocation());
+    }
+
+    public void enterWardrobe(boolean ignoreDistance, Location exitLocation, Location viewingLocation, Location npcLocation) {
+        if (!WardrobeSettings.inDistanceOfStatic(getPlayer().getLocation()) && !ignoreDistance) {
             MessagesUtil.sendMessage(getPlayer(), "not-near-wardrobe");
             return;
         }
@@ -224,14 +241,10 @@ public class CosmeticUser {
             return;
         }
 
-        if (wardrobe == null) {
-            wardrobe = new Wardrobe(this);
-            wardrobe.start();
+        if (userWardrobeManager == null) {
+            userWardrobeManager = new UserWardrobeManager(this, exitLocation, viewingLocation, npcLocation);
+            userWardrobeManager.start();
         }
-    }
-
-    public Wardrobe getWardrobe() {
-        return wardrobe;
     }
 
     public void leaveWardrobe() {
@@ -240,9 +253,9 @@ public class CosmeticUser {
         if (event.isCancelled()) {
             return;
         }
-        if (!getWardrobe().getWardrobeStatus().equals(Wardrobe.WardrobeStatus.RUNNING)) return;
+        if (!getWardrobeManager().getWardrobeStatus().equals(UserWardrobeManager.WardrobeStatus.RUNNING)) return;
 
-        getWardrobe().setWardrobeStatus(Wardrobe.WardrobeStatus.STOPPING);
+        getWardrobeManager().setWardrobeStatus(UserWardrobeManager.WardrobeStatus.STOPPING);
 
         if (WardrobeSettings.isEnabledTransition()) {
             MessagesUtil.sendTitle(
@@ -253,16 +266,14 @@ public class CosmeticUser {
                     WardrobeSettings.getTransitionFadeOut()
             );
             Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), () -> {
-                wardrobe.end();
-                wardrobe = null;
+                userWardrobeManager.end();
+                userWardrobeManager = null;
             }, WardrobeSettings.getTransitionDelay());
-        } else {
-
         }
     }
 
     public boolean isInWardrobe() {
-        if (wardrobe == null) return false;
+        if (userWardrobeManager == null) return false;
         return true;
     }
 
@@ -275,17 +286,20 @@ public class CosmeticUser {
     }
 
     public void spawnBackpack(CosmeticBackpackType cosmeticBackpackType) {
+        if (this.userBackpackManager != null) return;
         this.userBackpackManager = new UserBackpackManager(this);
         userBackpackManager.spawnBackpack(cosmeticBackpackType);
     }
 
     public void despawnBackpack() {
+        if (userBackpackManager == null) return;
         userBackpackManager.despawnBackpack();
         userBackpackManager = null;
     }
 
-    public UserBackpackManager getUserBackpackManager() {
-        return userBackpackManager;
+    public boolean isBackupSpawned() {
+        if (this.userBackpackManager == null) return false;
+        return true;
     }
 
     public void spawnBalloon(CosmeticBalloonType cosmeticBalloonType) {
@@ -298,7 +312,7 @@ public class CosmeticUser {
         List<Player> viewer = PlayerUtils.getNearbyPlayers(player);
         viewer.add(player);
 
-        PacketManager.sendLeashPacket(getBalloonEntity().getPufferfishBalloonId(), player.getEntityId(), viewer);
+        PacketManager.sendLeashPacket(getBalloonManager().getPufferfishBalloonId(), player.getEntityId(), viewer);
     }
 
     public void despawnBalloon() {
@@ -382,9 +396,9 @@ public class CosmeticUser {
         hideCosmetics = true;
         hiddenReason = reason;
         if (hasCosmeticInSlot(CosmeticSlot.BALLOON)) {
-            getBalloonEntity().removePlayerFromModel(getPlayer());
+            getBalloonManager().removePlayerFromModel(getPlayer());
             List<Player> viewer = PlayerUtils.getNearbyPlayers(getPlayer());
-            PacketManager.sendLeashPacket(getBalloonEntity().getPufferfishBalloonId(), -1, viewer);
+            PacketManager.sendLeashPacket(getBalloonManager().getPufferfishBalloonId(), -1, viewer);
         }
         if (hasCosmeticInSlot(CosmeticSlot.BACKPACK)) {
             userBackpackManager.getArmorstand().getEquipment().clear();
@@ -406,9 +420,9 @@ public class CosmeticUser {
         hiddenReason = HiddenReason.NONE;
         if (hasCosmeticInSlot(CosmeticSlot.BALLOON)) {
             CosmeticBalloonType balloonType = (CosmeticBalloonType) getCosmetic(CosmeticSlot.BALLOON);
-            getBalloonEntity().addPlayerToModel(this, balloonType);
+            getBalloonManager().addPlayerToModel(this, balloonType);
             List<Player> viewer = PlayerUtils.getNearbyPlayers(getPlayer());
-            PacketManager.sendLeashPacket(getBalloonEntity().getPufferfishBalloonId(), getPlayer().getEntityId(), viewer);
+            PacketManager.sendLeashPacket(getBalloonManager().getPufferfishBalloonId(), getPlayer().getEntityId(), viewer);
         }
         if (hasCosmeticInSlot(CosmeticSlot.BACKPACK)) {
             CosmeticBackpackType cosmeticBackpackType = (CosmeticBackpackType) getCosmetic(CosmeticSlot.BACKPACK);
@@ -433,6 +447,7 @@ public class CosmeticUser {
         PLUGIN,
         POTION,
         ACTION,
-        COMMAND
+        COMMAND,
+        EMOTE
     }
 }

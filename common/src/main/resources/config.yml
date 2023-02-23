@@ -21,6 +21,9 @@ cosmetic-settings:
   # Ticking periods is something that ensures new players near a player get the packets to actually apply to the user.
 
   unapply-on-death: false # If when a player dies, their cosmetics should be unapplied. If this is true, use hmccosmetics.unapplydeath.bypass to bypass
+  force-permission-join: true # Checks a player permission if they can have a cosmetic when they join the server.
+
+  emote-distance: -3 # This shows how far away the camera should be while a player is doing an emote. Negative is behind player.
 
   # view distance in blocks that other players will see the backpack cosmetic
   # setting this to lower than the server player view distance should fix the
@@ -32,9 +35,11 @@ cosmetic-settings:
     y: 3
     z: 0.5
 dye-menu:
-  # If you use ItemsAdder, set this to "§f:offset_-8::cosmetics_gui:"
+  # If you use ItemsAdder, set this to "§f:offset_-8::dye_menu:"
   # If you use Oraxen, set this to "<glyph:neg_shift_8><glyph:dye_menu>"
   title: "§f"
+  input-slot: 19
+  output-slot: 25
 wardrobe:
   # spawn static wardrobe if in this radius of wardrobe-location
   static-radius: 10

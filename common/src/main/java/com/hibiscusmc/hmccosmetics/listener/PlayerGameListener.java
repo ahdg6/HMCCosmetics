@@ -15,6 +15,7 @@ import com.hibiscusmc.hmccosmetics.cosmetic.CosmeticSlot;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticArmorType;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBackpackType;
 import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticBalloonType;
+import com.hibiscusmc.hmccosmetics.cosmetic.types.CosmeticEmoteType;
 import com.hibiscusmc.hmccosmetics.gui.Menu;
 import com.hibiscusmc.hmccosmetics.gui.Menus;
 import com.hibiscusmc.hmccosmetics.user.CosmeticUser;
@@ -28,11 +29,10 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Pose;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityDamageByEntityEvent;
-import org.bukkit.event.entity.EntityPotionEffectEvent;
-import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.*;
@@ -81,8 +81,12 @@ public class PlayerGameListener implements Listener {
     public void onPlayerShift(PlayerToggleSneakEvent event) {
         CosmeticUser user = CosmeticUsers.getUser(event.getPlayer().getUniqueId());
 
-        if (!event.isSneaking()) return;
         if (user == null) return;
+        if (event.isSneaking()) {
+            user.getUserEmoteManager().stopEmote();
+        }
+
+        if (!event.isSneaking()) return;
         if (!user.isInWardrobe()) return;
 
         user.leaveWardrobe();
@@ -151,12 +155,33 @@ public class PlayerGameListener implements Listener {
 
     @EventHandler
     public void onPlayerLook(PlayerMoveEvent event) {
+        if (event.isCancelled()) return;
+        Player player = event.getPlayer();
         // TODO: Move to packets
-        CosmeticUser user = CosmeticUsers.getUser(event.getPlayer().getUniqueId());
+        CosmeticUser user = CosmeticUsers.getUser(player);
         if (user == null) return;
         // Really need to look into optimization of this
         user.updateCosmetic(CosmeticSlot.BACKPACK);
         user.updateCosmetic(CosmeticSlot.BALLOON);
+    }
+
+    @EventHandler
+    public void onPlayerPoseChange(EntityPoseChangeEvent event) {
+        if (!(event.getEntity() instanceof Player)) return;
+        Player player = ((Player) event.getEntity()).getPlayer();
+        CosmeticUser user = CosmeticUsers.getUser(player);
+        if (user == null) return;
+        if (!user.hasCosmeticInSlot(CosmeticSlot.BACKPACK)) return;
+        Pose pose = event.getPose();
+        if (pose.equals(Pose.STANDING)) {
+            if (!user.isBackupSpawned()) {
+                user.spawnBackpack((CosmeticBackpackType) user.getCosmetic(CosmeticSlot.BACKPACK));
+            }
+            return;
+        }
+        if (pose.equals(Pose.SLEEPING) || pose.equals(Pose.SWIMMING) || pose.equals(Pose.FALL_FLYING)) {
+            user.despawnBackpack();
+        }
     }
 
     @EventHandler
@@ -198,9 +223,23 @@ public class PlayerGameListener implements Listener {
         CosmeticUser user = CosmeticUsers.getUser(event.getPlayer().getUniqueId());
         if (user == null) return;
         // Really need to look into optimization of this
+        if (user.hasCosmeticInSlot(CosmeticSlot.EMOTE) && event.getPlayer().isSneaking() && event.getPlayer().hasPermission("hmccosmetics.emote.shiftrun")) {
+            CosmeticEmoteType cosmeticEmoteType = (CosmeticEmoteType) user.getCosmetic(CosmeticSlot.EMOTE);
+            cosmeticEmoteType.run(user);
+            event.setCancelled(true);
+            return;
+        }
         Bukkit.getScheduler().runTaskLater(HMCCosmeticsPlugin.getInstance(), () -> {
             user.updateCosmetic(CosmeticSlot.OFFHAND);
         }, 2);
+    }
+
+    @EventHandler
+    public void onPlayerPickupItem(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player)) return;
+        CosmeticUser user = CosmeticUsers.getUser(event.getEntity().getUniqueId());
+        if (user == null) return;
+        if (user.isInWardrobe()) event.setCancelled(true);
     }
 
     @EventHandler
@@ -355,8 +394,12 @@ public class PlayerGameListener implements Listener {
                 Player player = event.getPlayer();
                 CosmeticUser user = CosmeticUsers.getUser(player);
                 if (user == null) return;
+                if (user.getUserEmoteManager().isPlayingEmote()) {
+                    event.setCancelled(true);
+                    return;
+                }
                 if (!user.isInWardrobe()) return;
-                Menu menu = Menus.getMenu(Settings.getDefaultMenu());
+                Menu menu = Menus.getDefaultMenu();
                 if (menu == null) return;
                 menu.openMenu(user);
                 event.setCancelled(true);
